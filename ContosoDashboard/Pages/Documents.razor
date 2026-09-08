@@ -1,0 +1,182 @@
+@page "/documents"
+@using ContosoDashboard.Models
+@using ContosoDashboard.Services
+@using System.Security.Claims
+@inject IDocumentService DocumentService
+@inject AuthenticationStateProvider AuthStateProvider
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<PageTitle>Documents - ContosoDashboard</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Documents</h1>
+</div>
+
+<div class="row">
+    <div class="col-lg-4 mb-4">
+        <DocumentUpload OnUploadComplete="LoadDocuments" />
+    </div>
+    
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">My Documents</h5>
+                
+                <div class="input-group" style="max-width: 250px;">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" placeholder="Search..." @bind="_searchTerm" @bind:event="oninput" />
+                </div>
+            </div>
+            <div class="card-body p-0">
+                @if (_isLoading)
+                {
+                    <div class="text-center p-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                }
+                else if (!FilteredDocuments.Any())
+                {
+                    <div class="text-center p-5 text-muted">
+                        <i class="bi bi-file-earmark-text fs-1 mb-3"></i>
+                        <p>No documents found.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Title</th>
+                                    <th>Category</th>
+                                    <th>Size</th>
+                                    <th>Project</th>
+                                    <th>Date</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var doc in FilteredDocuments)
+                                {
+                                    <tr>
+                                        <td>
+                                            <div class="d-flex align-items-center">
+                                                <i class="@GetFileIcon(doc.FileType) fs-4 me-2 text-primary"></i>
+                                                <div>
+                                                    <div class="fw-bold">@doc.Title</div>
+                                                    @if (!string.IsNullOrEmpty(doc.Tags))
+                                                    {
+                                                        <small class="text-muted">@doc.Tags</small>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td><span class="badge bg-secondary">@doc.Category</span></td>
+                                        <td>@FormatBytes(doc.FileSize)</td>
+                                        <td>
+                                            @if (doc.Project != null)
+                                            {
+                                                <span class="text-truncate d-inline-block" style="max-width: 150px;" title="@doc.Project.Name">
+                                                    @doc.Project.Name
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">Personal</span>
+                                            }
+                                        </td>
+                                        <td>@doc.UploadDate.ToString("MMM dd, yyyy")</td>
+                                        <td class="text-end">
+                                            <a href="/api/filedownload/@doc.DocumentId" target="_blank" class="btn btn-sm btn-outline-primary" title="Download">
+                                                <i class="bi bi-download"></i>
+                                            </a>
+                                            @if (doc.UploaderId == _userId)
+                                            {
+                                                <button class="btn btn-sm btn-outline-danger ms-1" @onclick="() => DeleteDocument(doc.DocumentId)" title="Delete">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private IEnumerable<Document> _documents = Array.Empty<Document>();
+    private bool _isLoading = true;
+    private int _userId;
+    private string _searchTerm = string.Empty;
+
+    private IEnumerable<Document> FilteredDocuments => string.IsNullOrWhiteSpace(_searchTerm) 
+        ? _documents 
+        : _documents.Where(d => 
+            d.Title.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) || 
+            (d.Description != null && d.Description.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)) ||
+            (d.Tags != null && d.Tags.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)) ||
+            (d.Project != null && d.Project.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var userIdString = user.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (int.TryParse(userIdString, out _userId))
+            {
+                await LoadDocuments();
+            }
+        }
+    }
+
+    private async Task LoadDocuments()
+    {
+        _isLoading = true;
+        try
+        {
+            _documents = await DocumentService.GetUserDocumentsAsync(_userId);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task DeleteDocument(int id)
+    {
+        // For a real app, use a modal confirmation instead of window.confirm
+        await DocumentService.DeleteDocumentAsync(id, _userId);
+        await LoadDocuments();
+    }
+
+    private string GetFileIcon(string contentType)
+    {
+        return contentType.ToLower() switch
+        {
+            var c when c.Contains("pdf") => "bi-file-earmark-pdf",
+            var c when c.Contains("word") || c.Contains("document") => "bi-file-earmark-word",
+            var c when c.Contains("excel") || c.Contains("spreadsheet") => "bi-file-earmark-excel",
+            var c when c.Contains("image") => "bi-file-earmark-image",
+            _ => "bi-file-earmark-text"
+        };
+    }
+
+    private string FormatBytes(long bytes)
+    {
+        string[] suffixes = { "B", "KB", "MB", "GB", "TB", "PB", "EB" };
+        if (bytes == 0) return "0 B";
+        int place = Convert.ToInt32(Math.Floor(Math.Log(bytes, 1024)));
+        double num = Math.Round(bytes / Math.Pow(1024, place), 1);
+        return $"{num} {suffixes[place]}";
+    }
+}

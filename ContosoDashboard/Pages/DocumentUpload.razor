@@ -1,0 +1,222 @@
+@using Microsoft.AspNetCore.Components.Forms
+@using ContosoDashboard.Services
+@using System.Security.Claims
+@using ContosoDashboard.Models
+@inject IDocumentService DocumentService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IProjectService ProjectService
+
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">Upload Document</h5>
+    </div>
+    <div class="card-body">
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="alert alert-danger">@_errorMessage</div>
+        }
+        @if (!string.IsNullOrEmpty(_successMessage))
+        {
+            <div class="alert alert-success">@_successMessage</div>
+        }
+
+        <EditForm Model="@_uploadModel" OnValidSubmit="HandleValidSubmit">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="mb-3">
+                <label class="form-label">Title <span class="text-danger">*</span></label>
+                <InputText class="form-control" @bind-Value="_uploadModel.Title" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Description</label>
+                <InputTextArea class="form-control" @bind-Value="_uploadModel.Description" />
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">Category <span class="text-danger">*</span></label>
+                    <InputSelect class="form-select" @bind-Value="_uploadModel.Category">
+                        <option value="">-- Select Category --</option>
+                        <option value="Project Documents">Project Documents</option>
+                        <option value="Team Resources">Team Resources</option>
+                        <option value="Personal Files">Personal Files</option>
+                        <option value="Reports">Reports</option>
+                        <option value="Presentations">Presentations</option>
+                        <option value="Other">Other</option>
+                    </InputSelect>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Project</label>
+                    <InputSelect class="form-select" @bind-Value="_uploadModel.ProjectId">
+                        <option value="">-- No Project (Personal) --</option>
+                        @foreach (var p in _availableProjects)
+                        {
+                            <option value="@p.ProjectId">@p.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Tags</label>
+                <InputText class="form-control" @bind-Value="_uploadModel.Tags" placeholder="e.g., Q3, budget, draft" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">File (Max 25MB) <span class="text-danger">*</span></label>
+                <InputFile class="form-control" OnChange="HandleFileSelected" @key="_inputFileId" />
+            </div>
+
+            <button type="submit" class="btn btn-primary" disabled="@_isUploading">
+                @if (_isUploading)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    <span> Uploading...</span>
+                }
+                else
+                {
+                    <span>Upload</span>
+                }
+            </button>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public EventCallback OnUploadComplete { get; set; }
+
+    private UploadModel _uploadModel = new();
+    private IBrowserFile? _selectedFile;
+    private string _inputFileId = Guid.NewGuid().ToString();
+    private bool _isUploading;
+    private string? _errorMessage;
+    private string? _successMessage;
+    private int _userId;
+    private IEnumerable<Project> _availableProjects = Array.Empty<Project>();
+    private const long MaxFileSize = 25 * 1024 * 1024; // 25 MB
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var userIdString = user.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (int.TryParse(userIdString, out _userId))
+            {
+                _availableProjects = await ProjectService.GetUserProjectsAsync(_userId);
+            }
+        }
+    }
+
+    private void HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        _errorMessage = null;
+        _successMessage = null;
+        var file = e.File;
+        
+        if (file.Size > MaxFileSize)
+        {
+            _errorMessage = $"File size ({file.Size / 1024 / 1024} MB) exceeds maximum allowed size (25 MB).";
+            _selectedFile = null;
+            return;
+        }
+
+        var allowedExtensions = new[] { ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".jpg", ".jpeg", ".png" };
+        var extension = Path.GetExtension(file.Name).ToLowerInvariant();
+        
+        if (!allowedExtensions.Contains(extension))
+        {
+            _errorMessage = "Unsupported file type.";
+            _selectedFile = null;
+            return;
+        }
+
+        _selectedFile = file;
+        
+        // Auto-fill title if empty
+        if (string.IsNullOrWhiteSpace(_uploadModel.Title))
+        {
+            _uploadModel.Title = Path.GetFileNameWithoutExtension(file.Name);
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (_selectedFile == null)
+        {
+            _errorMessage = "Please select a file to upload.";
+            return;
+        }
+
+        _isUploading = true;
+        _errorMessage = null;
+        _successMessage = null;
+
+        try
+        {
+            var fileName = _selectedFile.Name;
+            var fileSize = _selectedFile.Size;
+            var contentType = _selectedFile.ContentType;
+
+            using var memoryStream = new MemoryStream();
+            using (var fileStream = _selectedFile.OpenReadStream(MaxFileSize))
+            {
+                await fileStream.CopyToAsync(memoryStream);
+            }
+            memoryStream.Position = 0;
+
+            await DocumentService.UploadDocumentAsync(
+                _userId,
+                _uploadModel.Title,
+                _uploadModel.Description ?? string.Empty,
+                _uploadModel.Category,
+                _uploadModel.ProjectId,
+                _uploadModel.Tags ?? string.Empty,
+                memoryStream,
+                fileName,
+                contentType,
+                fileSize
+            );
+
+            _successMessage = "Document uploaded successfully.";
+            
+            // Reset form
+            _uploadModel = new();
+            _selectedFile = null;
+            _inputFileId = Guid.NewGuid().ToString(); // Force InputFile re-render
+            
+            if (OnUploadComplete.HasDelegate)
+            {
+                await OnUploadComplete.InvokeAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Upload failed: {ex.Message}";
+        }
+        finally
+        {
+            _isUploading = false;
+        }
+    }
+
+    private class UploadModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Title is required")]
+        public string Title { get; set; } = string.Empty;
+        
+        public string? Description { get; set; }
+        
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Category is required")]
+        public string Category { get; set; } = string.Empty;
+        
+        public int? ProjectId { get; set; }
+        
+        public string? Tags { get; set; }
+    }
+}
