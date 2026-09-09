@@ -1,53 +1,83 @@
 # Implementation Plan: Document Upload and Management
 
-**Branch**: `feature-document-management` | **Date**: 2026-09-08 | **Spec**: `/specs/document-management/spec.md`
+**Branch**: `feature-document-management` | **Date**: 2026-09-09 | **Spec**: `/specs/document-management/spec.md`
 **Input**: Feature specification from `/specs/document-management/spec.md`
 
 ## Summary
 
-Implement document upload and management for ContosoDashboard using Blazor Server and EF Core. The implementation uses a local file storage service abstraction (`IFileStorageService`) to store files outside `wwwroot` securely, and tracks document metadata in a new `Document` database entity.
+Add secure document upload, document browsing, sharing, and lifecycle management to the ContosoDashboard application. The design follows the repository constitution by keeping business logic in services, persisting document metadata in SQLite, storing files outside `wwwroot`, and enforcing authorization checks before users can view, download, or delete a document.
 
 ## Technical Context
 
-**Language/Version**: C# 12 / .NET 8.0  
-**Primary Dependencies**: ASP.NET Core Blazor Server, Entity Framework Core  
-**Storage**: SQL Server LocalDB, Local File System (`AppData/uploads`)  
-**Target Platform**: Web (Offline Training Environment)  
-**Constraints**: Must use interface abstractions for storage, no external cloud dependencies, IDOR protection required.  
+**Language/Version**: C# / .NET 9  
+**Primary Dependencies**: ASP.NET Core Blazor Server, Entity Framework Core, SQLite, ASP.NET Core Authentication and Authorization  
+**Storage**: SQLite for document metadata; local filesystem under `AppData/uploads` for actual file content  
+**Testing**: `dotnet build` plus future integration tests focused on authorization, access checks, and storage behavior  
+**Target Platform**: Linux ARM64 workstation and local training environment  
+**Project Type**: Web application (single project)  
+**Performance Goals**: Upload flows complete within 30 seconds for standard files; document lists load within 2 seconds for typical workloads; search and access checks remain responsive  
+**Constraints**: Offline-first behavior, mock authentication model, IDOR protection, abstraction for storage migration, and training-friendly local-only setup  
+**Scale/Scope**: Internal training app with small-to-medium project and team activity; emphasis on secure and understandable patterns rather than enterprise scale
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- [x] Offline-First with Cloud Migration Path (Uses IFileStorageService)
-- [x] Defense in Depth (IDOR protection on downloads and viewing)
-- [x] Safe File Paths (GUID-based names generated before database insertion)
+- [x] Offline-First with Cloud Migration Path: the storage abstraction keeps the app offline-friendly while allowing future Azure-style replacement.
+- [x] Infrastructure Abstraction: file storage logic is separated behind `IFileStorageService` and injected into the document service.
+- [x] Training Purpose Constraints: the app continues to use mock auth and local file storage, avoiding external dependencies.
+- [x] Defense in Depth: role checks and document ownership checks prevent unauthorized access.
+- [x] Code Quality Standards: changes align with the existing Models / Services / Pages / Controllers architecture and EF Core patterns already used by the repository.
 
 ## Project Structure
 
-### Source Code
+### Documentation (this feature)
+
+```text
+specs/document-management/
+├── plan.md              # This file
+├── research.md          # Phase 0 output
+├── data-model.md        # Phase 1 output
+├── quickstart.md        # Phase 1 output
+├── contracts/           # Phase 1 output
+├── spec.md              # Stakeholder-approved feature specification
+└── tasks.md             # Future task breakdown
+```
+
+### Source Code (repository root)
 
 ```text
 ContosoDashboard/
+├── Controllers/
+│   └── FileDownloadController.cs
+├── Data/
+│   └── ApplicationDbContext.cs
 ├── Models/
-│   ├── Document.cs             # New entity
-│   └── DocumentShare.cs        # New entity
-├── Services/
-│   ├── IFileStorageService.cs  # Storage abstraction
-│   ├── LocalFileStorageService.cs
-│   ├── IDocumentService.cs
-│   └── DocumentService.cs
+│   ├── Document.cs
+│   ├── DocumentShare.cs
+│   ├── Project.cs
+│   ├── User.cs
+│   └── TaskItem.cs
 ├── Pages/
-│   ├── Documents.razor         # Document list
-│   └── DocumentUpload.razor    # Upload component
-└── Controllers/
-    └── FileDownloadController.cs # Secure file delivery
+│   ├── Documents.razor
+│   ├── DocumentUpload.razor
+│   ├── ProjectDetails.razor
+│   └── Tasks.razor
+├── Services/
+│   ├── IDocumentService.cs
+│   ├── DocumentService.cs
+│   ├── IFileStorageService.cs
+│   ├── LocalFileStorageService.cs
+│   ├── IUserService.cs
+│   ├── IProjectService.cs
+│   └── NotificationService.cs
+├── Program.cs
+├── appsettings.json
+└── appsettings.Development.json
 ```
 
-**Structure Decision**: Integrated into the existing monolithic ContosoDashboard structure, adhering to the established separation of concerns (Models, Services, Pages).
+**Structure Decision**: Keep the feature inside the single ASP.NET Core project and follow the existing pattern of Models, Services, Pages, and Controllers rather than introducing a new app boundary.
 
 ## Complexity Tracking
 
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| Controller added to Blazor app | Secure file downloads outside `wwwroot` | Direct static files bypass authorization. |
+No constitution violations require additional justification. The design stays within the project’s established architecture and training constraints.

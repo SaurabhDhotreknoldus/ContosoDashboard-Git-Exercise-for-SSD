@@ -1,50 +1,58 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# ContosoDashboard Constitution
+<!--
+Sync Impact Report
+Version change: 1.0.0 -> 1.1.0
+Modified principles:
+- I. Offline-First with Cloud Migration Path -> I. Offline-First with Cloud Migration Path
+- II. Infrastructure Abstraction -> II. Infrastructure Abstraction
+- III. Training Purpose Constraints -> III. Training Purpose Constraints
+- IV. Defense in Depth -> IV. Defense in Depth
+- V. Code Quality Standards -> V. Code Quality Standards
+Added sections: None
+Removed sections: None
+Follow-up TODOs: None
+-->
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Offline-First with Cloud Migration Path
+This application must remain usable in offline training environments. All dependencies and operational workflows must work without internet access or external cloud services. Any future migration to Azure or other cloud services must be achievable by swapping infrastructure implementations, not by rewriting business logic.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Infrastructure Abstraction
+All infrastructure dependencies must use interface abstractions such as `IFileStorageService` and injectable service boundaries. Business logic must depend on abstractions rather than concrete platform-specific implementations, keeping the application portable and testable.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Training Purpose Constraints
+This repository is intentionally for training and demonstration. The application must avoid external service dependencies whenever possible, use mock authentication and simplified security scaffolding, and remain easy to run locally without production-grade infrastructure.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Defense in Depth
+The application must implement layered security controls even in a training context:
+- Authorization must be enforced on protected pages and routes via `[Authorize]`.
+- Role-based access control must be hierarchical and explicit.
+- Service-level validation must prevent unauthorized access and IDOR-based data exposure.
+- User isolation must ensure each user only sees their own authorized data and actions.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Code Quality Standards
+- Async and await must be used for non-blocking I/O and service operations.
+- EF Core queries must minimize N+1 issues through explicit eager loading and careful query design.
+- Clean separation of concerns must remain across Models, Services, Data, and Pages.
+- Dependency injection must be used for loose coupling and maintainability.
+- Frequently queried fields require indexes to support predictable performance.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Security Requirements
+- IDOR Protection: service methods must verify that the current user has permission before accessing or mutating any entity.
+- File Upload Security: uploaded files must be stored outside the `wwwroot` directory and must be validated before saving.
+- Safe File Paths: unique file paths must be generated before database insertion to avoid collisions, path traversal, and orphaned records.
+- Authentication boundaries: the mock authentication flow must stay aligned with the application’s training-only design and must not be treated as production-grade identity.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
-
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
-
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+## Development Workflow
+- Features must align with the mock authentication and authorization model unless explicitly modified by governance.
+- Database schema decisions must favor simple, consistent integer identifiers for core entities within the current training architecture.
+- Changes must preserve offline-first operation and must not introduce hidden cloud dependencies.
+- Any new feature, refactor, or infrastructure change must be reviewed for security, abstraction, and training-scope compliance before approval.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
+This constitution governs how the ContosoDashboard project is implemented and reviewed. All changes that affect security, persistence, authentication, or architecture must remain consistent with these principles. Any amendment requires a documented rationale, a version bump, and confirmation that the change preserves the project’s training-only scope and offline-first constraints.
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+All reviews must verify compliance with this constitution before merge approval. Complexity, security exceptions, and new platform dependencies must be justified in writing and must not bypass the core principles.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.1.0 | **Ratified**: 2026-09-08 | **Last Amended**: 2026-09-09
